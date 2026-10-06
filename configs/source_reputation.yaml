@@ -1,0 +1,67 @@
+# Source reputation priors (0..1). A *prior*, not a verdict: reputation weighs evidence during
+# verification and contradiction resolution, it never makes a claim true. Organisations override
+# any domain with a domain policy (PUT /api/v1/orgs/{org}/domain-policies/{domain}).
+#
+# Matching: the most specific listed suffix wins on label boundaries ("example.com" covers
+# "www.example.com" but not "badexample.com"). Suffixes starting with "." match TLDs.
+default: 0.5
+tiers:
+  high: 0.9
+  medium: 0.7
+  low: 0.3
+domains:
+  high:
+    - .gov
+    - .mil
+    - .edu
+    - .int
+    - europa.eu
+    - who.int
+    - oecd.org
+    - worldbank.org
+    - imf.org
+    - sec.gov
+    - nist.gov
+    - cisa.gov
+    - enisa.europa.eu
+    - postgresql.org
+    - python.org
+    - ietf.org
+    - rfc-editor.org
+    - w3.org
+    - arxiv.org
+    - nature.com
+    - science.org
+    - acm.org
+    - ieee.org
+    - reuters.com
+    - apnews.com
+  medium:
+    - bbc.co.uk
+    - bbc.com
+    - ft.com
+    - wsj.com
+    - bloomberg.com
+    - economist.com
+    - nytimes.com
+    - theguardian.com
+    - techcrunch.com
+    - theverge.com
+    - wired.com
+    - arstechnica.com
+    - zdnet.com
+    - infoq.com
+    - github.com
+    - gartner.com
+    - forrester.com
+    - crunchbase.com
+    - wikipedia.org
+  low:
+    - medium.com
+    - substack.com
+    - blogspot.com
+    - wordpress.com
+    - tumblr.com
+    - quora.com
+    - reddit.com
+    - pinterest.com

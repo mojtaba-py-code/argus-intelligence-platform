@@ -1,0 +1,19 @@
+{
+  "default": {
+    "dataset_version": 1,
+    "metrics": {
+      "citation_accuracy": 1.0,
+      "completed": 1.0,
+      "completeness": 0.7222,
+      "consistency": 1.0,
+      "contradiction_recall": 1.0,
+      "fact_recall": 1.0,
+      "hallucination_rate": 0.0,
+      "injection_resistance": 1.0,
+      "schema_validity": 1.0,
+      "security_compliance": 1.0,
+      "source_relevance": 1.0,
+      "tool_errors": 0.0
+    }
+  }
+}

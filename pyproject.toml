@@ -1,0 +1,309 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "argus-intelligence-platform"
+version = "0.1.0"
+description = "Argus - an enterprise AI intelligence & research platform: multi-tenant research agents, authorization-first RAG, evidence verification, continuous monitoring and defence-in-depth security."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Mojtaba Karimi" }]
+requires-python = ">=3.12"
+keywords = ["ai", "llm", "rag", "agents", "research", "intelligence", "fastapi", "postgresql", "pgvector", "security", "multi-tenant"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+dependencies = [
+    # --- HTTP API -------------------------------------------------------------------
+    "fastapi>=0.142,<0.143",
+    "uvicorn[standard]>=0.54,<1",
+    "python-multipart>=0.0.32",          # multipart parsing for document uploads
+    # --- validation / configuration -------------------------------------------------
+    "pydantic>=2.13,<3",
+    "pydantic-settings>=2.15,<3",
+    "email-validator>=2.3,<3",
+    "pyyaml>=6.0.3,<7",                  # prompt registry + policy files (safe_load only)
+    "jinja2>=3.1.6,<4",                  # prompt templates (SandboxedEnvironment only)
+    # --- persistence ----------------------------------------------------------------
+    "sqlalchemy[asyncio]>=2.1,<2.2",
+    "asyncpg>=0.31,<1",
+    "alembic>=1.20,<2",
+    "pgvector>=0.5,<0.6",
+    "redis>=8.1,<9",
+    # --- outbound HTTP (SSRF-guarded egress is built on httpcore's backend API) -----
+    "httpx>=0.28.1,<0.29",
+    "httpcore>=1.0.9,<2",
+    "anyio>=4.15,<5",
+    "idna>=3.10",                        # IDNA 2008 / UTS 46 host normalisation (SSRF guard)
+    "certifi>=2026.7",                   # CA bundle pinned for the egress TLS context
+    # --- security primitives --------------------------------------------------------
+    "argon2-cffi>=25.1,<26",             # Argon2id password hashing
+    "pyjwt[crypto]>=2.15,<3",            # EdDSA-signed access tokens
+    "cryptography>=50,<51",              # AES-GCM envelope encryption, Ed25519 keys
+    "pyotp>=2.10,<3",                    # RFC 6238 TOTP (MFA)
+    "nh3>=0.3.7,<0.4",                   # allow-list HTML sanitiser (ammonia)
+    "defusedxml>=0.7.1,<0.8",            # XXE-safe XML parsing (DOCX)
+    # --- content processing ---------------------------------------------------------
+    "selectolax>=1.0,<2",                # HTML5 parsing (lexbor); never executes scripts
+    "pypdf>=6.19,<7",
+    "protego>=0.7,<0.8",                 # robots.txt (supports wildcards, unlike urllib)
+    "rapidfuzz>=3.14,<4",                # entity resolution
+    "fpdf2>=2.8.9,<3",                   # PDF report export
+    # --- notifications --------------------------------------------------------------
+    "aiosmtplib>=5.1,<6",
+    # --- observability --------------------------------------------------------------
+    "structlog>=26.1",
+    "prometheus-client>=0.26,<1",
+    "opentelemetry-api>=1.45,<2",
+    "opentelemetry-sdk>=1.45,<2",
+    "opentelemetry-exporter-otlp-proto-http>=1.45,<2",
+    "opentelemetry-instrumentation-fastapi>=0.66b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.66b0",
+    "opentelemetry-instrumentation-httpx>=0.66b0",
+]
+
+[project.optional-dependencies]
+anthropic = ["anthropic>=1.11,<2"]     # Claude via the official SDK (built on httpx2)
+openai = ["openai>=3.24,<4"]           # OpenAI and OpenAI-compatible self-hosted models
+s3 = ["boto3>=1.43,<2"]                # S3 / MinIO object storage
+all = ["argus-intelligence-platform[anthropic,openai,s3]"]
+
+[project.scripts]
+argus = "argus.apps.cli.main:main"
+
+[project.urls]
+Documentation = "https://github.com/mojtaba-py-code/argus-intelligence-platform/tree/main/docs"
+Source = "https://github.com/mojtaba-py-code/argus-intelligence-platform"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1,<10",
+    "pytest-asyncio>=1.4,<2",
+    "pytest-cov>=7.1,<8",
+    "pytest-timeout>=2.4,<3",
+    "hypothesis>=6.168,<7",
+    "respx>=0.23,<0.24",
+    "fakeredis[lua]>=2.39,<3",
+    "moto[s3]>=5.2,<6",
+    "asgi-lifespan>=2.1,<3",
+    "time-machine>=3.5,<4",
+    "ruff>=0.16,<0.17",
+    "mypy>=2.4,<3",
+    "types-pyyaml>=6.0.12",
+    "types-defusedxml>=0.7",
+    "bandit>=1.9,<2",
+    "pip-audit>=2.10,<3",
+    "import-linter>=2.15,<3",
+    "pre-commit>=4.6,<5",
+]
+# A pip-installable PostgreSQL 16 + pgvector for machines without Docker (scripts/local_postgres.py).
+localdb = ["pgserver>=0.1.4"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/argus"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"migrations" = "argus/_migrations"
+"prompts" = "argus/_prompts"
+"configs" = "argus/_configs"
+
+[tool.hatch.build.targets.sdist]
+include = ["src/argus", "migrations", "prompts", "configs", "tests", "evals", "docs", "deploy", "README.md", "LICENSE", "alembic.ini"]
+
+# --------------------------------------------------------------------------------------
+# Ruff
+# --------------------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+extend-exclude = ["migrations/versions/*.py.tmpl"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF", "S", "ASYNC", "PT", "PTH",
+    "DTZ", "T20", "PIE", "RET", "ARG", "BLE", "G", "ISC", "LOG", "PERF", "FURB", "TID",
+    "ERA", "PGH", "TC", "FLY", "SLOT", "Q", "RSE", "INT", "TRY002", "TRY201", "TRY300",
+    "TRY401", "FA",
+]
+ignore = [
+    "E501",     # line length is enforced by the formatter
+    "S101",     # assert is used in tests and for type narrowing only (never for security checks)
+    "TC001", "TC002", "TC003",  # runtime-evaluated annotations (FastAPI/Pydantic) need real imports
+    "RUF012",   # SQLAlchemy/Pydantic class attributes
+    "ISC001",   # conflicts with the formatter
+    "N818",     # domain errors read better as NotFound / PermissionDenied than NotFoundError
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106", "S108", "S311", "ARG001", "ARG002", "SLF001", "S603", "S607", "BLE001", "ASYNC109", "ASYNC110", "ASYNC240", "RUF001", "RUF003", "PT011"]
+"migrations/**" = ["N999", "ERA001", "E712", "S608"]
+"src/argus/infrastructure/db/migration_support.py" = ["S608"]
+# composes constant SQL fragments (the fencing predicate); no user input reaches the strings
+"src/argus/infrastructure/queue/queue.py" = ["S608"]
+# composes constant CTE fragments and filter clauses; every value is a bind parameter
+"src/argus/modules/knowledge/retrieval.py" = ["S608"]
+"scripts/**" = ["T201", "S603", "S607", "S608", "BLE001", "SLF001"]
+"src/argus/apps/cli/**" = ["T201"]
+# multilingual detection patterns contain Persian/Arabic letters on purpose
+"src/argus/security/injection.py" = ["RUF001"]
+"src/argus/modules/llm/embeddings.py" = ["RUF001"]  # Persian stopwords
+"evals/**" = ["T201"]
+# implements httpcore's network-backend interface, whose methods take `timeout` parameters
+"src/argus/modules/evaluation/corpus.py" = ["ASYNC109"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Path", "fastapi.Header", "fastapi.Body", "fastapi.File", "fastapi.Form", "fastapi.Security"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["argus", "tests"]
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# --------------------------------------------------------------------------------------
+# mypy
+# --------------------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool", "possibly-undefined"]
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+files = ["src", "tests"]
+exclude = ["migrations/"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg", "asyncpg.*", "pgvector", "pgvector.*", "pyotp", "pyotp.*", "protego", "fpdf", "fpdf.*", "fakeredis", "fakeredis.*", "pgserver", "selectolax", "selectolax.*", "anthropic", "anthropic.*", "openai", "openai.*", "boto3", "boto3.*", "botocore", "botocore.*", "moto", "moto.*"]
+ignore_missing_imports = true
+
+# --------------------------------------------------------------------------------------
+# pytest
+# --------------------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "9.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["-ra", "--strict-markers", "--strict-config", "--import-mode=importlib"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+timeout = 120
+xfail_strict = true
+filterwarnings = [
+    "error",
+    # third-party deprecations we cannot fix are listed explicitly, never blanket-ignored
+    "ignore::DeprecationWarning:opentelemetry.*",
+]
+markers = [
+    "integration: needs PostgreSQL (ARGUS_TEST_DATABASE_URL) - skipped when it is not configured",
+    "security: security regression tests",
+    "e2e: end-to-end workflow tests through the HTTP API and the worker",
+    "ai_eval: deterministic AI evaluation regression gate",
+    "slow: slower tests",
+    "perf: benchmarks with budgets - skipped unless selected (pytest -m perf)",
+]
+
+[tool.coverage.run]
+source = ["argus"]
+branch = true
+omit = ["*/argus/apps/cli/__main__.py"]
+
+[tool.coverage.report]
+# Measured at 86% (branches included) over the complete suite; CI fails below this floor.
+fail_under = 85
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+    "\\.\\.\\.$",
+]
+
+# --------------------------------------------------------------------------------------
+# bandit (ruff's S rules run on every save; bandit is the second opinion in CI)
+# --------------------------------------------------------------------------------------
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "migrations"]
+
+# --------------------------------------------------------------------------------------
+# import-linter: architecture rules that CI enforces (docs/architecture/repository-structure.md)
+# --------------------------------------------------------------------------------------
+[tool.importlinter]
+root_packages = ["argus"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layered architecture: apps -> modules -> security -> infrastructure -> core"
+type = "layers"
+layers = [
+    "argus.apps",
+    "argus.modules",
+    "argus.security",
+    "argus.infrastructure",
+    "argus.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "Business modules are transport-agnostic (no FastAPI/Starlette outside argus.apps)"
+type = "forbidden"
+source_modules = ["argus.modules", "argus.security", "argus.infrastructure", "argus.core"]
+forbidden_modules = ["fastapi", "starlette"]
+
+[[tool.importlinter.contracts]]
+name = "The core kernel has no I/O framework dependencies"
+type = "forbidden"
+source_modules = ["argus.core"]
+forbidden_modules = ["sqlalchemy", "redis", "httpx", "httpcore", "asyncpg"]
+
+[[tool.importlinter.contracts]]
+name = "Only the LLM gateway talks to model providers"
+type = "forbidden"
+# Everything except argus.modules.llm. Indirect imports are allowed: callers use the gateway,
+# which is the one place that imports provider SDKs.
+source_modules = [
+    "argus.apps",
+    "argus.core",
+    "argus.infrastructure",
+    "argus.security",
+    "argus.modules.agents",
+    "argus.modules.audit",
+    "argus.modules.documents",
+    "argus.modules.evaluation",
+    "argus.modules.identity",
+    "argus.modules.knowledge",
+    "argus.modules.monitoring",
+    "argus.modules.notifications",
+    "argus.modules.platform",
+    "argus.modules.research",
+    "argus.modules.security_center",
+    "argus.modules.sources",
+    "argus.modules.tenancy",
+]
+forbidden_modules = ["anthropic", "openai", "httpx2"]
+allow_indirect_imports = true

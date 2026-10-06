@@ -1,0 +1,7 @@
+# Optional: scrape configuration for clusters running the Prometheus Operator.
+#   components: [../../components/prometheus-operator]   (in an overlay)
+# Alert rules: load deploy/observability/prometheus/rules/argus-alerts.yml into your Prometheus.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+resources:
+  - pod-monitor.yaml

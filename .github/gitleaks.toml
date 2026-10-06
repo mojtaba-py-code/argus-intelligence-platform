@@ -1,0 +1,24 @@
+# gitleaks configuration: the default rules plus this project's own credential formats.
+[extend]
+useDefault = true
+
+[[rules]]
+id = "argus-api-key"
+description = "Argus API key"
+regex = '''argus_sk_[a-z0-9]{12}_[A-Za-z0-9]{40,}'''
+tags = ["key", "argus"]
+
+[[rules]]
+id = "argus-refresh-token"
+description = "Argus refresh / one-time token"
+regex = '''argus_(rt|ot|iv)_[A-Za-z0-9_-]{40,}'''
+tags = ["token", "argus"]
+
+[allowlist]
+description = "Deterministic test-only key material and documentation examples"
+paths = [
+  '''tests/support\.py''',
+  '''tests/fixtures/.*''',
+  '''docs/.*\.md''',
+  '''\.env\.example''',
+]

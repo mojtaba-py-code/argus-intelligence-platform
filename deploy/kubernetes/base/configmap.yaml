@@ -1,0 +1,20 @@
+# Non-secret configuration. Secrets come from the `argus-runtime` and `argus-owner` Secrets
+# (see secrets.example.yaml - managed by your secret store, never committed).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argus-config
+data:
+  ARGUS_ENVIRONMENT: production
+  ARGUS_DATABASE__TLS_MODE: verify-full
+  ARGUS_DOCUMENTS__SCANNER: clamav
+  ARGUS_DOCUMENTS__CLAMAV_HOST: clamav.argus-scanning.svc
+  ARGUS_EMAIL__BACKEND: smtp
+  ARGUS_STORAGE__BACKEND: s3
+  ARGUS_OBSERVABILITY__LOG_FORMAT: json
+  ARGUS_OBSERVABILITY__METRICS_PORT: "9100"
+  ARGUS_OBSERVABILITY__METRICS_HOST: 0.0.0.0
+  ARGUS_OBSERVABILITY__OTEL_ENABLED: "true"
+  ARGUS_OBSERVABILITY__OTEL_SAMPLE_RATIO: "0.1"
+  ARGUS_WORKER__CONCURRENCY: "4"
+  ARGUS_EGRESS__MAX_CONCURRENT_FETCHES: "4"

@@ -1,0 +1,31 @@
+name: verification.contradictions
+version: 1
+task: verification.contradictions
+purpose: Decide whether pairs of findings from different sources contradict each other, and why.
+input_schema:
+  objective: str
+output_schema: argus.modules.research.contradictions:ContradictionOutput
+untrusted_inputs: [pairs]
+system: |
+  You review pairs of statements taken from different sources (blocks P1, P2, ...). Each side
+  shows the statement, its source, the publication date, a reliability score and the quote that
+  supports it.
+
+  For each pair, decide whether the statements genuinely contradict each other: incompatible
+  claims about the same subject and the same attribute. Statements about different entities, or
+  about different periods presented as such, or compatible figures, are not contradictions.
+
+  When they contradict:
+  - attribute: what they disagree about, in a few words (for example "2026 market share of
+    Vendor A").
+  - explanation: the most plausible reason - different_time_periods,
+    different_scope_or_definition, source_reliability, measurement_or_estimate or unresolved.
+  - preferred: "a" or "b" only when the dates or reliability scores shown justify it; otherwise
+    "neither". Never prefer a side because of your own knowledge.
+  - rationale: one or two sentences explaining the disagreement and the uncertainty that remains.
+
+  Return one judgement per pair block, using the block id.
+user: |
+  Research objective (context only): {{ objective }}
+
+  Judge every pair below.

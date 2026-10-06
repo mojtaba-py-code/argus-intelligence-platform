@@ -1,0 +1,56 @@
+name: Bug report
+description: Something does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Thanks for the report. **Security vulnerabilities must be reported privately** through
+        Security → Report a vulnerability, not here. Never paste secrets, tokens, `.env` contents
+        or personal data into an issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. uv run argus serve
+        2. POST /v1/...
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      placeholder: "argus --version, or a commit SHA"
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How is Argus running?
+      options:
+        - Docker Compose
+        - Local processes (uv run)
+        - Kubernetes
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Python version, PostgreSQL version, ARGUS_ENVIRONMENT.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant log output
+      description: Redact anything sensitive before pasting.
+      render: shell

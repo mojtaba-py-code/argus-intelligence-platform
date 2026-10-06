@@ -1,0 +1,194 @@
+# Argus alert rules. Every alert links to its runbook section in docs/operations/alerts.md, and
+# tests/unit/test_observability_assets.py checks that every metric used here exists in the code.
+#
+# Severities: critical = page someone now; warning = look within the working day.
+groups:
+  - name: argus-availability
+    rules:
+      - alert: ArgusTargetDown
+        expr: up{job=~"argus-.*"} == 0
+        for: 2m
+        labels: {severity: critical}
+        annotations:
+          summary: "{{ $labels.job }} instance {{ $labels.instance }} is not being scraped"
+          description: "The process is down, crash-looping, or its metrics endpoint is unreachable."
+          runbook_url: docs/operations/alerts.md#argustargetdown
+
+      - alert: ArgusHighErrorRate
+        expr: |
+          sum(rate(argus_http_requests_total{status=~"5.."}[5m]))
+            / clamp_min(sum(rate(argus_http_requests_total[5m])), 1e-9) > 0.02
+        for: 10m
+        labels: {severity: critical}
+        annotations:
+          summary: "More than 2% of API requests fail with a server error"
+          description: "5xx ratio over 5 minutes: {{ $value | humanizePercentage }}."
+          runbook_url: docs/operations/alerts.md#argushigherrorrate
+
+      - alert: ArgusSlowRequests
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(
+            argus_http_request_duration_seconds_bucket{route!~".*/documents|.*/export|unmatched"}[5m]
+          ))) > 1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "API p95 latency is above 1 s (uploads and exports excluded)"
+          description: "p95 over 5 minutes: {{ $value | humanizeDuration }}."
+          runbook_url: docs/operations/alerts.md#argusslowrequests
+
+      - alert: ArgusDatabaseSlow
+        expr: |
+          histogram_quantile(0.95, sum by (le) (rate(
+            argus_db_query_duration_seconds_bucket{operation!="ping"}[5m]
+          ))) > 0.5
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "Database statement p95 is above 500 ms"
+          description: "p95 over 5 minutes: {{ $value | humanizeDuration }}."
+          runbook_url: docs/operations/alerts.md#argusdatabaseslow
+
+      - alert: ArgusDatabasePoolSaturated
+        expr: |
+          max by (job, instance) (
+            argus_db_pool_connections{state="checked_out"} / clamp_min(argus_db_pool_capacity, 1)
+          ) > 0.9
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "{{ $labels.job }} {{ $labels.instance }} uses over 90% of its database connections"
+          description: "Requests and jobs are about to queue for a connection."
+          runbook_url: docs/operations/alerts.md#argusdatabasepoolsaturated
+
+  - name: argus-work
+    rules:
+      - alert: ArgusQueueBacklog
+        expr: max by (queue) (argus_queue_depth) > 500
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "Queue {{ $labels.queue }} has more than 500 waiting jobs"
+          description: "Workers are not keeping up (depth {{ $value }})."
+          runbook_url: docs/operations/alerts.md#argusqueuebacklog
+
+      - alert: ArgusJobsDeadLettered
+        expr: sum by (task) (increase(argus_jobs_total{outcome="dead"}[15m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Jobs of task {{ $labels.task }} exhausted their retries"
+          description: "Dead-lettered in the last 15 minutes: {{ $value }}."
+          runbook_url: docs/operations/alerts.md#argusjobsdeadlettered
+
+      - alert: ArgusJobFailureRate
+        expr: |
+          sum(rate(argus_jobs_total{outcome=~"failed|dead"}[15m]))
+            / clamp_min(sum(rate(argus_jobs_total[15m])), 1e-9) > 0.1
+        for: 15m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 10% of jobs fail"
+          description: "Failure ratio over 15 minutes: {{ $value | humanizePercentage }}."
+          runbook_url: docs/operations/alerts.md#argusjobfailurerate
+
+      - alert: ArgusSchedulerTaskFailing
+        expr: sum by (task) (increase(argus_scheduler_task_runs_total{outcome="failed"}[30m])) > 2
+        labels: {severity: warning}
+        annotations:
+          summary: "Scheduler duty {{ $labels.task }} keeps failing"
+          description: "Failures in the last 30 minutes: {{ $value }}."
+          runbook_url: docs/operations/alerts.md#argusschedulertaskfailing
+
+  - name: argus-ai
+    rules:
+      - alert: ArgusLLMProviderErrors
+        expr: |
+          sum by (provider) (rate(argus_llm_requests_total{outcome=~"error|retryable_error|circuit_open"}[10m]))
+            / clamp_min(sum by (provider) (rate(argus_llm_requests_total[10m])), 1e-9) > 0.2
+        for: 10m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 20% of calls to {{ $labels.provider }} fail"
+          description: "The gateway falls back to other models; quality and cost may change."
+          runbook_url: docs/operations/alerts.md#argusllmprovidererrors
+
+      - alert: ArgusLLMCostSpike
+        expr: |
+          sum(increase(argus_llm_cost_usd_total[1h])) > 5
+            and sum(increase(argus_llm_cost_usd_total[1h]))
+              > 3 * sum(increase(argus_llm_cost_usd_total[1h] offset 1d))
+        labels: {severity: warning}
+        annotations:
+          summary: "Model spend in the last hour is over three times the same hour yesterday"
+          description: "Spend in the last hour: ${{ $value | printf \"%.2f\" }}."
+          runbook_url: docs/operations/alerts.md#argusllmcostspike
+
+      - alert: ArgusRetrievalEmpty
+        expr: |
+          sum(rate(argus_knowledge_retrieval_results_bucket{le="0.0"}[1h]))
+            / clamp_min(sum(rate(argus_knowledge_retrieval_results_count[1h])), 1e-9) > 0.5
+        for: 1h
+        labels: {severity: warning}
+        annotations:
+          summary: "More than half of knowledge searches return nothing"
+          description: "Retrieval quality has degraded (embeddings, indexing or the reranker)."
+          runbook_url: docs/operations/alerts.md#argusretrievalempty
+
+  - name: argus-security
+    rules:
+      - alert: ArgusAuditChainBroken
+        expr: sum(increase(argus_audit_verifications_total{result="broken"}[1h])) > 0
+        labels: {severity: critical}
+        annotations:
+          summary: "An organisation's audit log failed its integrity check"
+          description: "Treat as a security incident; do not modify the database."
+          runbook_url: docs/operations/alerts.md#argusauditchainbroken
+
+      - alert: ArgusAgentToolDenials
+        expr: sum by (agent) (increase(argus_agent_tool_calls_total{outcome="denied"}[1h])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Agent {{ $labels.agent }} asked for tools it may not use"
+          description: "Often the trace of a prompt injection that tried to steer the agent."
+          runbook_url: docs/operations/alerts.md#argusagenttooldenials
+
+      - alert: ArgusInjectionSurge
+        expr: sum(increase(argus_injection_detections_total{level="high"}[1h])) > 20
+        labels: {severity: warning}
+        annotations:
+          summary: "Unusually many high-risk prompt-injection detections"
+          description: "{{ $value }} in the last hour: a targeted campaign or a poisoned source."
+          runbook_url: docs/operations/alerts.md#argusinjectionsurge
+
+      - alert: ArgusEgressBlockedSurge
+        expr: sum(increase(argus_egress_blocked_total[15m])) > 50
+        labels: {severity: warning}
+        annotations:
+          summary: "Many outbound requests were blocked by the SSRF guard"
+          description: "{{ $value }} in 15 minutes: possible SSRF probing through monitors or sources."
+          runbook_url: docs/operations/alerts.md#argusegressblockedsurge
+
+      - alert: ArgusAccessDeniedSurge
+        expr: sum(increase(argus_access_denied_total[15m])) > 100
+        labels: {severity: warning}
+        annotations:
+          summary: "Members are being refused many actions"
+          description: "{{ $value }} denials in 15 minutes: probing, a broken client or a bad role change."
+          runbook_url: docs/operations/alerts.md#argusaccessdeniedsurge
+
+      - alert: ArgusLoginFailureSurge
+        expr: |
+          sum(increase(argus_http_requests_total{route="/api/v1/auth/login", status="401"}[15m])) > 100
+        labels: {severity: warning}
+        annotations:
+          summary: "Many failed sign-ins"
+          description: "{{ $value }} in 15 minutes: credential stuffing or brute force."
+          runbook_url: docs/operations/alerts.md#argusloginfailuresurge
+
+      - alert: ArgusRateLimitDegraded
+        expr: sum(increase(argus_ratelimit_degraded_total[10m])) > 0
+        labels: {severity: warning}
+        annotations:
+          summary: "Rate limits fell back to per-process counters (Redis unreachable)"
+          description: "Limits still apply but are no longer shared between replicas."
+          runbook_url: docs/operations/alerts.md#argusratelimitdegraded

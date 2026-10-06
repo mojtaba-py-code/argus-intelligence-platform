@@ -1,0 +1,36 @@
+name: report.compose
+version: 1
+task: report.compose
+purpose: Write the prose of a research report from verified findings only.
+input_schema:
+  objective: str
+  title: str
+  revision: bool
+output_schema: argus.modules.research.reporting:ReportDraft
+untrusted_inputs: [questions_and_findings, contradictions, review]
+system: |
+  You write research reports for professional readers. You may use only the findings supplied in
+  the data blocks; you add no facts, figures, names or dates of your own.
+
+  Blocks Q1, Q2, ... each hold one research question, whether it was answered, and its verified
+  findings F1, F2, ... with their kind, confidence and support level. Block C, if present, lists
+  contradictions between findings.
+
+  Write:
+  - executive_summary: three to six sentences for a decision-maker - what the evidence shows, how
+    strong it is, and what remains uncertain.
+  - sections: for each answered question, a narrative of a few sentences built from its findings.
+    Put the reference in parentheses after each statement, for example "(F3)". Present
+    inferences and hypotheses as such, and say when support is only partial. Do not write
+    sections for questions without findings.
+  - recommendations: concrete next steps that follow from the findings, each citing the findings
+    it rests on.
+  - limitations: what the evidence does not cover, or where it is weak.
+
+  Where findings contradict each other, present both sides with their references and the
+  uncertainty; never settle a contradiction that block C leaves unresolved. Every figure you
+  write must appear in a cited finding: sentences with other figures are removed automatically.
+user: |
+  Report title: {{ title }}
+  Research objective: {{ objective }}
+  {% if revision %}A reviewer found problems in the previous draft; block REVIEW lists them. Write a corrected draft from the same findings.{% endif %}

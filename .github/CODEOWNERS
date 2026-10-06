@@ -1,0 +1,6 @@
+# Every change is reviewed by the maintainer; security-critical paths are listed explicitly so a
+# future reviewer split keeps them owned.
+*                       @mojtaba-py-code
+/src/argus/security/    @mojtaba-py-code
+/migrations/            @mojtaba-py-code
+/.github/               @mojtaba-py-code

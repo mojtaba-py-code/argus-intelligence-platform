@@ -1,0 +1,253 @@
+# Continuous integration. Every pull request runs, in order of cost:
+#   static analysis -> tests on 3 Python versions against PostgreSQL + pgvector (unit,
+#   integration, security, query plans, deterministic AI evaluation) -> dependency audit ->
+#   secret scan -> SAST (Semgrep) -> deployment configuration (compose, observability,
+#   Kubernetes) -> container build + vulnerability scan. A weekly run adds the benchmarks.
+# release.yml calls this workflow on the tagged commit: only a green run ships.
+#
+# Every third-party action is pinned to a full commit SHA (Dependabot keeps pins current), every
+# job starts from a read-only token, and no job uses a repository secret.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: "23 4 * * 1"  # weekly: new advisories surface without a push
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+  PYTHONIOENCODING: utf-8
+
+jobs:
+  static:
+    name: Static analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Format (ruff format)
+        run: uv run ruff format --check .
+      - name: Types (mypy --strict)
+        run: uv run mypy
+      - name: Architecture contracts (import-linter)
+        run: uv run lint-imports
+      - name: Static security analysis (bandit)
+        run: uv run bandit -c pyproject.toml -r src -q
+      - name: Lock file matches pyproject.toml
+        run: uv lock --check
+
+  tests:
+    name: Tests (Python ${{ matrix.python }}, PostgreSQL 17 + pgvector)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13", "3.14"]
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:cd4ccfdaf62cbfeb5c6ee19ef0dd663406d4ed740c320b324d016a90e85385b3
+        env:
+          # Throw-away server on an ephemeral runner: trust authentication, so no credential
+          # exists anywhere. The suite creates its own least-privilege roles per run.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ARGUS_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+        with:
+          python-version: ${{ matrix.python }}
+      - name: pytest - unit, integration, security, e2e and AI-evaluation suites
+        run: >-
+          uv run pytest -rs
+          --cov --cov-report=term --cov-report=xml:coverage.xml --junitxml=junit.xml
+      - name: Upload coverage and test reports
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: tests-py${{ matrix.python }}
+          path: |
+            coverage.xml
+            junit.xml
+          if-no-files-found: warn
+          retention-days: 14
+
+  dependency-audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: Audit every locked package (runtime and development), hash-pinned
+        run: |
+          uv export --frozen --all-extras --no-emit-project --format requirements-txt \
+            --output-file "${RUNNER_TEMP}/requirements.audit.txt"
+          uv run pip-audit --requirement "${RUNNER_TEMP}/requirements.audit.txt" \
+            --require-hashes --disable-pip --strict --progress-spinner off
+
+  secret-scan:
+    name: Secret scan (gitleaks, full history)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
+        env:
+          GITLEAKS_CONFIG: .github/gitleaks.toml
+
+  semgrep:
+    name: SAST (Semgrep)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: Semgrep (Python, OWASP, secrets rule packs + project rules)
+        run: >-
+          uv tool run --from "semgrep==1.179.0" semgrep scan --metrics off --error
+          --config p/python --config p/owasp-top-ten --config p/secrets
+          --config .github/semgrep.yml src
+
+  deployment-config:
+    name: Deployment configuration (compose, promtool, otelcol, kubeconform)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Compose files resolve (main stack + observability override)
+        env:
+          POSTGRES_SUPERUSER_PASSWORD: ci-only
+          POSTGRES_OWNER_PASSWORD: ci-only
+          POSTGRES_APP_PASSWORD: ci-only
+          REDIS_PASSWORD: ci-only
+          GRAFANA_ADMIN_PASSWORD: ci-only
+        run: |
+          touch .env
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.yml \
+            -f deploy/observability/compose.observability.yml config --quiet
+      - name: Alert rules and scrape configuration (promtool, same image as the stack)
+        run: |
+          docker run --rm --entrypoint promtool \
+            -v "$PWD/deploy/observability/prometheus:/etc/prometheus:ro" \
+            prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e \
+            check config /etc/prometheus/prometheus.yml
+      - name: Collector configuration (otelcol validate)
+        run: |
+          docker run --rm \
+            -v "$PWD/deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro" \
+            otel/opentelemetry-collector-contrib:0.162.0@sha256:340885ab6f46822374f00c58c067396b53b8d612559842e8821585567579d9e3 \
+            validate --config=/etc/otelcol/config.yaml
+      - name: Kubernetes overlays render and validate (kustomize, kubeconform)
+        env:
+          KUBECONFORM_SHA256: 9bc2bffbf71f261128533edaf912153948b7ff238f9a531ae6d34466ec287883
+        run: |
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            --output "${RUNNER_TEMP}/kubeconform.tar.gz" \
+            https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz
+          echo "${KUBECONFORM_SHA256}  ${RUNNER_TEMP}/kubeconform.tar.gz" | sha256sum --check --strict
+          tar -xzf "${RUNNER_TEMP}/kubeconform.tar.gz" -C "${RUNNER_TEMP}" kubeconform
+          for overlay in staging production; do
+            kubectl kustomize "deploy/kubernetes/overlays/${overlay}" \
+              | "${RUNNER_TEMP}/kubeconform" -strict -summary -kubernetes-version 1.33.0 -
+          done
+
+  benchmarks:
+    name: Benchmarks (weekly, budgets)
+    if: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:cd4ccfdaf62cbfeb5c6ee19ef0dd663406d4ed740c320b324d016a90e85385b3
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      ARGUS_TEST_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres
+      ARGUS_TEST_PERF_REPORT: benchmarks.md
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-python-env
+      - name: pytest -m perf
+        run: uv run pytest -m perf -rs
+      - name: Results in the job summary
+        if: ${{ !cancelled() }}
+        run: test -f benchmarks.md && cat benchmarks.md >> "$GITHUB_STEP_SUMMARY" || true
+
+  container:
+    name: Container image (build + Trivy)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [static]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: .
+          load: true
+          push: false
+          tags: argus:ci
+      - name: The image runs as a non-root user and the CLI starts
+        run: |
+          test "$(docker run --rm --entrypoint id argus:ci -u)" = "10001"
+          docker run --rm argus:ci --version
+      - name: Vulnerability scan (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          image-ref: argus:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"

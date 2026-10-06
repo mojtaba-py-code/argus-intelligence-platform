@@ -1,0 +1,45 @@
+# staging. Deploy only a signed digest (docs/operations/deployment.md):
+#   cosign verify ghcr.io/mojtaba-py-code/argus-intelligence-platform@sha256:<digest> \
+#     --certificate-identity-regexp '^https://github.com/mojtaba-py-code/argus-intelligence-platform/\.github/workflows/release\.yml@refs/tags/v' \
+#     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+#   kustomize edit set image argus=ghcr.io/mojtaba-py-code/argus-intelligence-platform@sha256:<digest>
+# The zero digest below never resolves: an overlay that was not pinned cannot deploy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+images:
+  - name: argus
+    newName: ghcr.io/mojtaba-py-code/argus-intelligence-platform
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+patches:
+  - target: {kind: ConfigMap, name: argus-config}
+    patch: |-
+      - op: add
+        path: /data/ARGUS_HTTP__PUBLIC_BASE_URL
+        value: https://staging.argus.example.com
+      - op: add
+        path: /data/ARGUS_HTTP__ALLOWED_HOSTS
+        value: '["staging.argus.example.com"]'
+      - op: add
+        path: /data/ARGUS_HTTP__CORS_ORIGINS
+        value: '["https://staging.argus.example.com"]'
+      - op: add
+        path: /data/ARGUS_HTTP__TRUSTED_PROXIES
+        value: '["10.0.0.0/8"]'
+      - op: add
+        path: /data/ARGUS_OBSERVABILITY__OTEL_ENDPOINT
+        value: https://otel-collector.monitoring.svc:4318
+      - op: replace
+        path: /data/ARGUS_OBSERVABILITY__OTEL_SAMPLE_RATIO
+        value: "1.0"
+  - target: {kind: HorizontalPodAutoscaler, name: argus-api}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+  - target: {kind: HorizontalPodAutoscaler, name: argus-worker}
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1

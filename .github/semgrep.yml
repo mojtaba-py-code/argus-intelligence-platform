@@ -1,0 +1,81 @@
+# Project-specific Semgrep rules: each one encodes a security invariant of this codebase, so a
+# violation fails CI instead of relying on a reviewer to remember it.
+rules:
+  - id: argus-no-raw-http-client-outside-egress
+    message: >-
+      Outbound HTTP to attacker-influenced URLs must go through argus.security.fetcher.SafeFetcher
+      (SSRF guard with DNS pinning). Construct raw httpx clients only in argus.security.egress or
+      for fixed, operator-configured endpoints in provider adapters.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern-either:
+          - pattern: httpx.AsyncClient(...)
+          - pattern: httpx.Client(...)
+      - pattern-not-inside: |
+          def $F(...):
+              ...
+              trust_env=False
+              ...
+    paths:
+      exclude:
+        - src/argus/security/egress.py
+        - src/argus/security/fetcher.py
+        - src/argus/modules/llm/providers/*
+        - src/argus/modules/sources/search/*
+        - src/argus/modules/llm/embeddings/*
+
+  - id: argus-no-fstring-sql
+    message: Build SQL with bound parameters (sqlalchemy.text + params), never with f-strings.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: sqlalchemy.text(f"...")
+      - pattern: text(f"...")
+      - pattern: $SESSION.execute(f"...", ...)
+    paths:
+      exclude:
+        - src/argus/infrastructure/db/migration_support.py
+
+  - id: argus-yaml-safe-load-only
+    message: yaml.load can construct arbitrary objects; use yaml.safe_load.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: yaml.load(...)
+      - pattern: yaml.unsafe_load(...)
+
+  - id: argus-no-dynamic-code
+    message: The platform never executes dynamic code (see ADR 0007).
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: exec(...)
+      - pattern: compile(..., "exec")
+
+  - id: argus-no-shell-subprocess
+    message: Subprocesses must use an argv list and shell=False.
+    severity: ERROR
+    languages: [python]
+    pattern-either:
+      - pattern: subprocess.run(..., shell=True, ...)
+      - pattern: subprocess.Popen(..., shell=True, ...)
+      - pattern: asyncio.create_subprocess_shell(...)
+
+  - id: argus-jwt-decode-pins-algorithms
+    message: jwt.decode must pin the accepted algorithms.
+    severity: ERROR
+    languages: [python]
+    patterns:
+      - pattern: jwt.decode(...)
+      - pattern-not: jwt.decode(..., algorithms=$ALGS, ...)
+
+  - id: argus-no-stdlib-random-for-secrets
+    message: Use the secrets module for anything security-relevant.
+    severity: WARNING
+    languages: [python]
+    pattern-either:
+      - pattern: random.choice(...)
+      - pattern: random.randint(...)
+      - pattern: random.getrandbits(...)

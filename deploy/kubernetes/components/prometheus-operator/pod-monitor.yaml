@@ -1,0 +1,17 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: argus
+spec:
+  selector:
+    matchExpressions:
+      - {key: app.kubernetes.io/component, operator: In, values: [api, worker, scheduler]}
+  podMetricsEndpoints:
+    - port: http
+      path: /metrics
+      authorization:
+        credentials: {name: argus-runtime, key: ARGUS_OBSERVABILITY__METRICS_TOKEN}
+    - port: metrics
+      path: /metrics
+      authorization:
+        credentials: {name: argus-runtime, key: ARGUS_OBSERVABILITY__METRICS_TOKEN}

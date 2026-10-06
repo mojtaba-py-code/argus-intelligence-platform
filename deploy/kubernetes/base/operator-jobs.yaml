@@ -1,0 +1,84 @@
+# The only workloads that receive the schema owner's DSN (Secret argus-owner).
+#
+# Migration Job: run it, and wait for it to succeed, before rolling out a new image
+# (docs/operations/deployment.md). Migrations are forward-only in production.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: argus-migrate
+  labels: {app.kubernetes.io/component: migrate}
+spec:
+  backoffLimit: 1
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels: {app.kubernetes.io/component: migrate}
+    spec:
+      serviceAccountName: argus-operator
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: migrate
+          image: argus
+          args: ["db", "migrate"]
+          envFrom:
+            - configMapRef: {name: argus-config}
+            - secretRef: {name: argus-runtime}
+            - secretRef: {name: argus-owner}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+---
+# Daily verification of every audit chain, including the platform chain (logins), which the
+# runtime role cannot read. Organisation chains are also verified by the scheduler.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: argus-audit-verify
+  labels: {app.kubernetes.io/component: audit-verify}
+spec:
+  schedule: "17 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels: {app.kubernetes.io/component: audit-verify}
+        spec:
+          serviceAccountName: argus-operator
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+            - name: audit-verify
+              image: argus
+              args: ["audit", "verify"]
+              envFrom:
+                - configMapRef: {name: argus-config}
+                - secretRef: {name: argus-runtime}
+                - secretRef: {name: argus-owner}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL]}
+              resources:
+                requests: {cpu: 100m, memory: 256Mi}
+                limits: {memory: 512Mi}

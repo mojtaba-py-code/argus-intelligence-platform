@@ -1,0 +1,134 @@
+# Local development stack: PostgreSQL + pgvector, Redis, Mailpit (SMTP sink), and the three Argus
+# process roles built from one image.
+#
+#   cp .env.example .env            # then fill in the passwords
+#   uv run argus keys generate --quote >> .env
+#   docker compose up --build
+#
+# Real malware scanning (ClamAV, ~1 GB of signatures, needs internet for freshclam):
+#   docker compose --profile scanning up --build   with ARGUS_DOCUMENTS__SCANNER=clamav in .env
+#
+# Hardening that also holds in development: application containers run as non-root with a
+# read-only root filesystem, no Linux capabilities and no privilege escalation; data services are
+# published on 127.0.0.1 only; every image is pinned by digest. Commands use the exec (list) form:
+# a command *string* is split by a shell-like parser where characters such as '>' change meaning.
+
+name: argus
+
+x-app: &app
+  image: argus:local
+  build: .
+  env_file: [.env]
+  environment: &app-env
+    ARGUS_ENVIRONMENT: development
+    ARGUS_DATABASE__URL: postgresql+asyncpg://argus_app:${POSTGRES_APP_PASSWORD:?set POSTGRES_APP_PASSWORD in .env}@postgres:5432/argus
+    ARGUS_DATABASE__MIGRATION_URL: postgresql+asyncpg://argus_owner:${POSTGRES_OWNER_PASSWORD:?set POSTGRES_OWNER_PASSWORD in .env}@postgres:5432/argus
+    ARGUS_DATABASE__TLS_MODE: disable
+    ARGUS_REDIS__URL: redis://:${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}@redis:6379/0
+    ARGUS_EMAIL__BACKEND: smtp
+    ARGUS_EMAIL__SMTP_HOST: mailpit
+    ARGUS_EMAIL__SMTP_PORT: "1025"
+    ARGUS_EMAIL__SMTP_STARTTLS: "false"
+    ARGUS_HTTP__ALLOWED_HOSTS: '["localhost","127.0.0.1","api"]'
+    ARGUS_STORAGE__LOCAL_ROOT: /var/lib/argus/storage
+  read_only: true
+  # Upload bodies over 1 MB spool to /tmp while they are validated; parser sandboxes use it too.
+  tmpfs: ["/tmp:size=256m,mode=1777"]
+  security_opt: ["no-new-privileges:true"]
+  cap_drop: [ALL]
+  volumes: ["storage:/var/lib/argus/storage"]
+  depends_on:
+    postgres: {condition: service_healthy}
+    redis: {condition: service_healthy}
+
+services:
+  postgres:
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:cd4ccfdaf62cbfeb5c6ee19ef0dd663406d4ed740c320b324d016a90e85385b3
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
+      POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    ports: ["127.0.0.1:5432:5432"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "argus"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+  redis:
+    image: redis:8.8.3-alpine@sha256:d7a884c0cf48d8a8fa9df8d577c56bde37a036f1035e0e77e2c95948de2ba066
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD}
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --protected-mode
+      - "yes"
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=\"$$REDIS_PASSWORD\" redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:v1.31.4@sha256:c8e498023104710cd71a7bb1856a51f2183ff0dc1ea07675067a38ecda08428f
+    ports: ["127.0.0.1:8025:8025"]  # web UI for development e-mail (verification, reset links)
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  clamav:
+    profiles: ["scanning"]
+    image: clamav/clamav:1.5.4-debian@sha256:9bb8712a50f0e75166e936c452cd82dd5e5be0b85586598930b5bbb84a99a578
+    # clamd listens on 3310 inside the compose network only (never published). Its
+    # StreamMaxLength (default 100 MB) must stay above ARGUS_HTTP__MAX_UPLOAD_BYTES.
+    volumes: ["clamav-db:/var/lib/clamav"]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  migrate:
+    <<: *app
+    command: ["db", "migrate"]
+    restart: "no"
+
+  api:
+    <<: *app
+    command: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["127.0.0.1:8000:8000"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  worker:
+    <<: *app
+    command: ["worker"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  scheduler:
+    <<: *app
+    command: ["scheduler"]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  storage:
+  clamav-db:

@@ -1,0 +1,39 @@
+# --- Python -------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# --- tooling caches -------------------------------------------------------------
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.hypothesis/
+.import_linter_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+# --- local runtime state (never commit) -------------------------------------------
+.env
+.env.*
+!.env.example
+/var/
+/data/
+*.sqlite3
+*.db
+*.pem
+*.key
+!tests/fixtures/**/*.pem
+secrets/
+# evaluation and benchmark outputs are regenerated, not versioned
+evals/results/
+benchmarks/results/
+# --- editors / OS -------------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,29 @@
+name: Feature request
+description: Propose a new capability or an improvement.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What are you trying to do, and why is it hard today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How it could work - API, CLI, configuration or dashboard changes.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and tenancy considerations
+      description: >-
+        Does this touch tenant isolation, authorisation, outbound network access, model calls or
+        stored data? How should it be constrained?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

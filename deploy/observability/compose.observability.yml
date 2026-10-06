@@ -1,0 +1,83 @@
+# Local observability stack on top of docker-compose.yml:
+#   OpenTelemetry Collector (scrubs attributes) -> Jaeger (traces)
+#   Prometheus (scrapes api, worker and scheduler; evaluates the alert rules)
+#   Grafana (the Argus dashboard, provisioned read-only)
+#
+#   docker compose -f docker-compose.yml -f deploy/observability/compose.observability.yml up --build
+#
+# UIs (bound to 127.0.0.1 only): Grafana http://127.0.0.1:3000 (user admin, password
+# GRAFANA_ADMIN_PASSWORD from .env), Jaeger http://127.0.0.1:16686, Prometheus
+# http://127.0.0.1:9090. Paths are relative to the project directory (the first compose file).
+# Every image is pinned by digest, like the main stack. Development settings: every trace is
+# kept (sample ratio 1.0) and /metrics needs no token inside the compose network.
+
+x-telemetry-env: &telemetry-env
+  ARGUS_OBSERVABILITY__OTEL_ENABLED: "true"
+  ARGUS_OBSERVABILITY__OTEL_ENDPOINT: http://otel-collector:4318
+  ARGUS_OBSERVABILITY__OTEL_SAMPLE_RATIO: "1.0"
+  ARGUS_OBSERVABILITY__METRICS_PORT: "9100"
+  ARGUS_OBSERVABILITY__METRICS_HOST: 0.0.0.0
+
+services:
+  api:
+    environment: *telemetry-env
+  worker:
+    environment: *telemetry-env
+  scheduler:
+    environment: *telemetry-env
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:340885ab6f46822374f00c58c067396b53b8d612559842e8821585567579d9e3
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on: [jaeger]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+    ports: ["127.0.0.1:16686:16686"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v3.13.4@sha256:87861b8cf91579109319ebc300f3f1060e6da9c05d6ae8ad15a20c879e84e32e
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - ./deploy/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus-data:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.0.10@sha256:c8f326efdb7be9be52047edaab34cf8dadb5152c1244af102eb0a517a7797068
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+      GF_SECURITY_COOKIE_SAMESITE: strict
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["127.0.0.1:3000:3000"]
+    security_opt: ["no-new-privileges:true"]
+    cap_drop: [ALL]
+    depends_on: [prometheus, jaeger]
+    restart: unless-stopped
+
+volumes:
+  prometheus-data:
+  grafana-data:

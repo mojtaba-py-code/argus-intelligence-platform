@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="color-scheme" content="light dark">
+  <title>Argus</title>
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="app.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="topbar">
+    <div class="brand">
+      <img src="icon.svg" alt="" width="28" height="28">
+      <span class="brand-name">Argus</span>
+      <span class="brand-tag">Intelligence &amp; research</span>
+    </div>
+    <nav id="session" class="session" aria-label="Session" hidden>
+      <label class="visually-hidden" for="org">Organisation</label>
+      <select id="org"></select>
+      <span id="who" class="who"></span>
+      <button id="reload" type="button" class="ghost">Refresh</button>
+      <button id="signout" type="button" class="ghost">Sign out</button>
+    </nav>
+  </header>
+
+  <main id="main" tabindex="-1">
+    <p id="loading" class="loading">Loading…</p>
+
+    <section id="view-login" class="auth" aria-labelledby="login-title" hidden>
+      <h1 id="login-title">Sign in</h1>
+      <form id="login-form" method="post" novalidate>
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" autocomplete="username" required maxlength="320">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required maxlength="1024">
+        <button type="submit">Sign in</button>
+        <p id="login-message" class="message" role="alert"></p>
+      </form>
+      <p class="fine">Your session lives in this tab only: reloading or closing it signs you out.</p>
+    </section>
+
+    <section id="view-mfa" class="auth" aria-labelledby="mfa-title" hidden>
+      <h1 id="mfa-title">Two-step verification</h1>
+      <form id="mfa-form" method="post" novalidate>
+        <label for="code">Code from your authenticator app, or a recovery code</label>
+        <input id="code" name="code" type="text" autocomplete="one-time-code" required minlength="6" maxlength="32" spellcheck="false">
+        <div class="actions">
+          <button type="submit">Verify</button>
+          <button id="mfa-cancel" type="button" class="ghost">Back</button>
+        </div>
+        <p id="mfa-message" class="message" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="view-empty" class="auth" aria-labelledby="empty-title" hidden>
+      <h1 id="empty-title">No organisation yet</h1>
+      <p>You are not a member of any organisation. Ask an owner for an invitation, or create one through the API.</p>
+    </section>
+
+    <section id="view-dashboard" aria-labelledby="dash-title" hidden>
+      <div class="dash-head">
+        <h1 id="dash-title">Overview</h1>
+        <p id="updated" class="muted"></p>
+      </div>
+      <p id="dash-message" class="message" role="alert"></p>
+      <div id="cards" class="cards"></div>
+    </section>
+  </main>
+
+  <dialog id="report" aria-labelledby="report-title">
+    <div class="dialog-head">
+      <h2 id="report-title">Report</h2>
+      <button id="report-close" type="button" class="ghost">Close</button>
+    </div>
+    <div id="report-body" class="report-body"></div>
+  </dialog>
+
+  <noscript><p class="noscript">The Argus dashboard needs JavaScript. The API is available at /api/v1.</p></noscript>
+</body>
+</html>

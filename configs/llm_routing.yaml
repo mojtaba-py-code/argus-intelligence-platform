@@ -1,0 +1,112 @@
+# Model routing and pricing for the LLM gateway (ADR 0006).
+#
+# Each task names an ordered list of candidate models; the gateway filters it per request by
+# capability, the organisation's data policy (a model's locality), circuit-breaker state and
+# budget, then tries the survivors in order. `local/extractive` closes every route so research
+# degrades to deterministic extractive answers instead of failing when the policy allows nothing
+# else.
+#
+# Prices are USD per million tokens and are configuration, not code: check them against the
+# provider's current price list before relying on cost reports. Models marked `routable: false`
+# are never chosen directly; they are priced because the server-side refusal fallback can serve a
+# turn with them.
+models:
+  claude-opus-5-5:
+    provider: anthropic
+    locality: external
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    structured_output: true
+    effort: true
+    refusal_fallback: true
+    price: {input: 4.00, output: 20.00, cache_read: 0.20, cache_write: 5.00}
+  claude-sonnet-5-5:
+    provider: anthropic
+    locality: external
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    structured_output: true
+    effort: true
+    refusal_fallback: true
+    price: {input: 2.00, output: 10.00, cache_read: 0.20, cache_write: 2.50}
+  claude-haiku-4-5:
+    provider: anthropic
+    locality: external
+    context_tokens: 200000
+    max_output_tokens: 64000
+    structured_output: true
+    effort: false
+    refusal_fallback: false
+    price: {input: 1.00, output: 5.00, cache_read: 0.10, cache_write: 1.25}
+  claude-opus-5:
+    provider: anthropic
+    locality: external
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    structured_output: true
+    effort: true
+    refusal_fallback: false
+    routable: false
+    price: {input: 5.00, output: 25.00, cache_read: 0.50, cache_write: 6.25}
+  claude-opus-4-8:
+    provider: anthropic
+    locality: external
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    structured_output: true
+    effort: true
+    refusal_fallback: false
+    routable: false
+    price: {input: 5.00, output: 25.00, cache_read: 0.50, cache_write: 6.25}
+  claude-sonnet-5:
+    provider: anthropic
+    locality: external
+    context_tokens: 1000000
+    max_output_tokens: 128000
+    structured_output: true
+    effort: true
+    refusal_fallback: false
+    routable: false
+    price: {input: 2.00, output: 10.00, cache_read: 0.20, cache_write: 2.50}
+  local/extractive:
+    provider: local
+    locality: local
+    context_tokens: 10000000
+    max_output_tokens: 1000000
+    structured_output: true
+    effort: false
+    refusal_fallback: false
+    price: {input: 0, output: 0, cache_read: 0, cache_write: 0}
+
+tasks:
+  default:
+    models: [claude-sonnet-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 8000
+  research.plan:
+    models: [claude-opus-5-5, claude-sonnet-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 16000
+  knowledge.answer:
+    models: [claude-opus-5-5, claude-sonnet-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 16000
+  analysis.*:
+    models: [claude-opus-5-5, claude-sonnet-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 16000
+  verification.*:
+    models: [claude-opus-5-5, claude-sonnet-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 16000
+  extraction.*:
+    models: [claude-sonnet-5-5, claude-haiku-4-5, local/extractive]
+    effort: low
+    max_output_tokens: 8000
+  report.*:
+    models: [claude-opus-5-5, local/extractive]
+    effort: medium
+    max_output_tokens: 32000
+  security.classify:
+    models: [claude-haiku-4-5, local/extractive]
+    max_output_tokens: 2000

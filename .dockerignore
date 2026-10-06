@@ -1,0 +1,12 @@
+# Build context = only what the image needs. Secrets and local state never enter it.
+**
+!pyproject.toml
+!uv.lock
+!README.md
+!LICENSE
+!src/**
+!migrations/**
+!prompts/**
+!configs/**
+**/__pycache__
+**/*.pyc
