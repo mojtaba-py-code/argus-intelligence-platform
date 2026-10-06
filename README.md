@@ -141,6 +141,7 @@ validation.
   [disaster recovery](docs/operations/disaster-recovery.md) · [alerts](docs/operations/alerts.md).
 * Decisions: [architecture decision records](docs/architecture/decisions/) and the
   [review of the original specification](docs/spec-review.md).
+* Release history: [changelog](CHANGELOG.md).
 
 ## Status
 Phases 1-25 of the [roadmap](docs/roadmap.md) are complete, except phase 18 (knowledge graph),
