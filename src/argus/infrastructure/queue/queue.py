@@ -87,17 +87,18 @@ _CLAIM = text(
               j.timeout_s, j.trace_parent
     """
 )
-# Constant SQL fragment (no user input): composed into the statements below.
+# Constant SQL fragment (no user input): composed into the statements below. Every value is a
+# bind parameter, so the text() statements are reviewed exceptions to avoid-sqlalchemy-text.
 _FENCE = "id = :id AND status = 'running' AND locked_by = :worker AND attempts = :attempt"
-_HEARTBEAT = text(
+_HEARTBEAT = text(  # nosemgrep: avoid-sqlalchemy-text
     f"UPDATE jobs SET locked_until = now() + make_interval(secs => :lease), updated_at = now() "  # nosec B608
     f"WHERE {_FENCE}"
 )
-_COMPLETE = text(
+_COMPLETE = text(  # nosemgrep: avoid-sqlalchemy-text
     "UPDATE jobs SET status = 'succeeded', result = CAST(:result AS jsonb), locked_by = NULL, "  # nosec B608
     f"locked_until = NULL, finished_at = now(), updated_at = now() WHERE {_FENCE}"
 )
-_FAIL = text(
+_FAIL = text(  # nosemgrep: avoid-sqlalchemy-text
     "UPDATE jobs SET status = CASE WHEN :retry AND attempts < max_attempts THEN 'queued' "  # nosec B608
     "WHEN :retry THEN 'dead' ELSE 'failed' END, "
     "run_at = CASE WHEN :retry AND attempts < max_attempts "
@@ -106,7 +107,7 @@ _FAIL = text(
     "locked_by = NULL, locked_until = NULL, last_error = :error, updated_at = now() "
     f"WHERE {_FENCE} RETURNING status"
 )
-_RELEASE = text(
+_RELEASE = text(  # nosemgrep: avoid-sqlalchemy-text
     "UPDATE jobs SET status = 'queued', run_at = now(), locked_by = NULL, locked_until = NULL, "  # nosec B608
     f"attempts = attempts - 1, updated_at = now() WHERE {_FENCE}"
 )

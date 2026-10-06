@@ -245,12 +245,12 @@ class Retriever:
 
     async def highest_classification(self, scope: SearchScope) -> Classification | None:
         """The most sensitive chunk this scope can return (``None`` when it is empty)."""
-        where, params = _filters(scope)
+        where, params = _filters(scope)  # constant clauses; every value is a bind parameter
         tenant = TenantScope(scope.organization_id, Actor.system())
         async with self._db.tenant(tenant, read_only=True) as session:
             value = (
                 await session.execute(
-                    text(f"SELECT max(c.classification) FROM document_chunks c WHERE {where}"),  # nosec B608
+                    text(f"SELECT max(c.classification) FROM document_chunks c WHERE {where}"),  # nosec B608  # nosemgrep: argus-no-fstring-sql, avoid-sqlalchemy-text
                     params,
                 )
             ).scalar_one_or_none()
@@ -362,7 +362,8 @@ class Retriever:
             "LEFT JOIN documents d ON d.id = c.document_id "
             "ORDER BY f.score DESC, c.id LIMIT :fetch"
         )
-        statement = text(sql)
+        # constant fragments only (_filters and the CTEs above); every value is a bind parameter
+        statement = text(sql)  # nosemgrep: avoid-sqlalchemy-text
         if binds:
             statement = statement.bindparams(*binds)
         rows = (await session.execute(statement, params)).mappings().all()

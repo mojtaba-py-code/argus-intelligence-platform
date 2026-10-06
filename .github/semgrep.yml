@@ -17,13 +17,17 @@ rules:
               ...
               trust_env=False
               ...
+      # in-process ASGI transport: requests go to the application object, never to the network
+      - pattern-not: httpx.AsyncClient(..., transport=httpx.ASGITransport(...), ...)
     paths:
       exclude:
         - src/argus/security/egress.py
         - src/argus/security/fetcher.py
+        # provider adapters: fixed or operator-configured API endpoints, hardened clients
+        # (trust_env=False, follow_redirects=False)
         - src/argus/modules/llm/providers/*
-        - src/argus/modules/sources/search/*
-        - src/argus/modules/llm/embeddings/*
+        - src/argus/modules/llm/voyage.py
+        - src/argus/modules/sources/search.py
 
   - id: argus-no-fstring-sql
     message: Build SQL with bound parameters (sqlalchemy.text + params), never with f-strings.

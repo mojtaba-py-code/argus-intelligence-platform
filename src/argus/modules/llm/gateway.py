@@ -83,8 +83,9 @@ def compose(request: LLMRequest, nonce: str) -> tuple[str, str]:
     user = request.prompt.user
     if request.untrusted:
         system = f"{system}\n\n{DATA_PREAMBLE}"
+        # a delimiter in the model prompt, never rendered as HTML
         blocks = [
-            f"<<data id={part.label} nonce={nonce}>>\n"
+            f"<<data id={part.label} nonce={nonce}>>\n"  # nosemgrep: raw-html-format
             f"{_DELIMITER_LOOKALIKE.sub('< <data', part.text)}\n"
             f"<</data id={part.label} nonce={nonce}>>"
             for part in request.untrusted

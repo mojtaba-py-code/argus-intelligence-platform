@@ -6,13 +6,16 @@ environment, timeout, output validation - is tested through real subprocesses.
 
 from __future__ import annotations
 
+import io
 import json
 import sys
 import time
+from types import SimpleNamespace
+from typing import Any, NoReturn
 
 import pytest
 
-from argus.security.parsing import ParseError, ParseLimits, SandboxedParser
+from argus.security.parsing import ParseError, ParseLimits, SandboxedParser, worker
 from argus.security.parsing.formats import (
     json_depth,
     parse_csv,
@@ -277,6 +280,42 @@ def test_sandbox_output_is_treated_as_untrusted(stdout: bytes, returncode: int, 
     with pytest.raises(ParseError) as caught:
         _Sandbox._result(stdout, returncode)
     assert caught.value.code == code
+
+
+# The worker in-process (every platform): one JSON reply, even when memory runs out.
+def run_worker(monkeypatch: pytest.MonkeyPatch, data: bytes) -> dict[str, Any]:
+    stdout = io.BytesIO()
+    monkeypatch.setattr(worker, "_limit_resources", lambda *_: None)  # never limit pytest itself
+    monkeypatch.setattr(sys, "stdin", SimpleNamespace(buffer=io.BytesIO(data)))
+    monkeypatch.setattr(sys, "stdout", SimpleNamespace(buffer=stdout))
+    assert worker.main(["worker", LIMITS.to_json(), "text", "160", "5"]) == 0
+    reply: dict[str, Any] = json.loads(stdout.getvalue())
+    return reply
+
+
+def test_worker_replies_with_the_parsed_document(monkeypatch: pytest.MonkeyPatch) -> None:
+    reply = run_worker(monkeypatch, b"Quarterly revenue grew.")
+    assert reply["ok"] is True
+    assert "Quarterly revenue grew." in reply["document"]["text"]
+
+
+class _Unencodable:
+    def model_dump(self, **_: object) -> NoReturn:
+        raise MemoryError
+
+
+def _exhausted(*_: object) -> NoReturn:
+    raise MemoryError
+
+
+@pytest.mark.parametrize(
+    "parse", [_exhausted, lambda *_: _Unencodable()], ids=["parsing", "encoding"]
+)
+def test_worker_reports_exhausted_memory_instead_of_crashing(
+    monkeypatch: pytest.MonkeyPatch, parse: object
+) -> None:
+    monkeypatch.setattr(worker, "parse_document", parse)
+    assert run_worker(monkeypatch, b"x") == {"ok": False, "error": "memory_limit"}
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX resource limits")

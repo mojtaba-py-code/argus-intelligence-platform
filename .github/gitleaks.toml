@@ -18,7 +18,12 @@ tags = ["token", "argus"]
 description = "Deterministic test-only key material and documentation examples"
 paths = [
   '''tests/support\.py''',
+  '''tests/unit/test_redaction\.py''',  # fake credential shapes the redaction tests must catch
   '''tests/fixtures/.*''',
   '''docs/.*\.md''',
   '''\.env\.example''',
+]
+# Type names, not secrets: generic-api-key reads `key: Ed25519PrivateKey | None` as a credential.
+regexes = [
+  '''^Ed25519PrivateKey$''',
 ]

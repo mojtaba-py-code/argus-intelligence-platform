@@ -7,7 +7,7 @@
 #   the virtual environment is owned by root, so the application cannot modify its own code.
 # Base images are pinned by digest; Dependabot proposes updates.
 
-ARG PYTHON_IMAGE=python:3.12.15-slim-trixie@sha256:6b1f85a08c199d29d5b6d71ab9c27bd5b3b393492e01216a15758ff69c4be8b8
+ARG PYTHON_IMAGE=python:3.12.15-slim-trixie@sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f
 ARG UV_IMAGE=ghcr.io/astral-sh/uv:0.12.23@sha256:61d393e44e249f2e4b526b6c7ddcecce245946826e608e11c93ad4f5bba55b21
 
 FROM ${UV_IMAGE} AS uv

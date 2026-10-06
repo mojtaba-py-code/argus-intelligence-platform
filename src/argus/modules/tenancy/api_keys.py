@@ -105,7 +105,7 @@ class ApiKeyService:
                         "service_account.created",
                         access.scope,
                         client,
-                        target_type="service_account",
+                        target_type="service_account",  # nosemgrep: detected-google-gcm-service-account
                         target_id=str(account.id),
                         details={"role": role.value},
                     ),
@@ -167,7 +167,7 @@ class ApiKeyService:
                     "service_account.disabled",
                     access.scope,
                     client,
-                    target_type="service_account",
+                    target_type="service_account",  # nosemgrep: detected-google-gcm-service-account
                     target_id=str(service_account_id),
                 ),
             )
