@@ -43,7 +43,7 @@ x-app: &app
 
 services:
   postgres:
-    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:cd4ccfdaf62cbfeb5c6ee19ef0dd663406d4ed740c320b324d016a90e85385b3
+    image: pgvector/pgvector:0.8.7-pg17-bookworm@sha256:ac08538c6f8b9904c33c8224c5e5706dbe760aca29db1d096972b4052c22a75d
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_SUPERUSER_PASSWORD:?set POSTGRES_SUPERUSER_PASSWORD in .env}
       POSTGRES_OWNER_PASSWORD: ${POSTGRES_OWNER_PASSWORD}
