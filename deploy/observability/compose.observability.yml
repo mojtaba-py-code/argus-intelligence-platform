@@ -27,7 +27,7 @@ services:
     environment: *telemetry-env
 
   otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.162.0@sha256:340885ab6f46822374f00c58c067396b53b8d612559842e8821585567579d9e3
+    image: otel/opentelemetry-collector-contrib:0.162.0-386@sha256:8b9211dbe1b3642eca91b237f39ede8baae9abaf97d6dcc88116f77f29545359
     command: ["--config=/etc/otelcol/config.yaml"]
     volumes: ["./deploy/observability/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
     read_only: true
@@ -37,7 +37,7 @@ services:
     restart: unless-stopped
 
   jaeger:
-    image: jaegertracing/jaeger:2.21.0@sha256:3d0ac795ff98aa04d1be04311d2dac6c25b4bfc8322dc02e53bc5b170c5018c3
+    image: jaegertracing/jaeger:2.22.0@sha256:836b967b5abcf1f7758066aa6b348619267a2f1459f72d472840570f9bd88a17
     ports: ["127.0.0.1:16686:16686"]
     security_opt: ["no-new-privileges:true"]
     cap_drop: [ALL]
